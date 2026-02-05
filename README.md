@@ -1,212 +1,88 @@
-# Usage
+# `list_packages_py`
 
-  ## List all packages
+## Usage
+
+  ### List all packages
   `python list_packages.py`
 
-  ## List versions for a specific package
+  ### List versions for a specific package
   `python list_packages.py -p requests`
 
-  ## List all packages with their versions (slower - one request per package)
+  ### List all packages with their versions (slower - one request per package)
   `python list_packages.py -v`
 
   The script reads credentials automatically from your pip config. You can also pass --index-url, --username, and --password to override.
 
-## Status as of 2026-02-04 (Tech Preview)
+## See file `trusted-libraries-<date>.txt`
+
+
+# `verify_package_provenance.py`
+
+## Usage
 
 ```
-[🎩︎mnagel pulp-index] (main) $ python list_packages.py 
-aiobotocore
-aiohappyeyeballs
-aiohttp
-aioitertools
-aiosignal
-amqp
-annotated-doc
-annotated-types
-anyio
-appdirs
-apscheduler
-argcomplete
-asgiref
-attrs
-babel
-billiard
-blinker
-boto3
-botocore
-cachetools
-calver
-celery
-certifi
-cffi
-charset-normalizer
-click
-click-didyoumean
-click-plugins
-click-repl
-colorama
-coverage
-cython
-decorator
-distlib
-django
-docutils
-et-xmlfile
-exceptiongroup
-execnet
-expandvars
-factory-boy
-faker
-fastapi
-filelock
-final-attestation-test
-fire
-flake8
-flask
-flask-cors
-flask-sqlalchemy
-flit-core
-flit-scm
-freezegun
-fresh-attestation-test
-frozenlist
-fsspec
-googleapis-common-protos
-greenlet
-grpcio
-grpcio-status
-h11
-h2
-hatch-fancy-pypi-readme
-hatch-vcs
-hatchling
-hpack
-httpcore
-httplib2
-httpx
-humanize
-hyperframe
-idna
-iniconfig
-isodate
-isort
-itsdangerous
-jinja2
-jmespath
-jsonschema
-jsonschema-specifications
-kombu
-librt
-markdown-it-py
-markupsafe
-marshmallow
-maturin
-mccabe
-mdurl
-meson
-meson-python
-mock
-more-itertools
-msgpack
-multidict
-my-test-package
-mypy
-mypy-extensions
-networkx
-ninja
-numpy
-oauthlib
-openpyxl
-packaging
-pandas
-pathspec
-pdm-backend
-pendulum
-pip
-pkgconfig
-platformdirs
-pluggy
-poetry-core
-prettytable
-prompt-toolkit
-propcache
-proto-plus
-protobuf
-psutil
-pyasn1
-pyasn1-modules
-pycodestyle
-pycparser
-pydantic
-pydantic-core
-pyflakes
-pygments
-pyjwt
-pynacl
-pyparsing
-pyproject-metadata
-pytest
-pytest-asyncio
-pytest-cov
-pytest-env
-pytest-html
-pytest-metadata
-pytest-mock
-pytest-rerunfailures
-pytest-timeout
-pytest-xdist
-python-dateutil
-python-dotenv
-referencing
-requests
-requests-oauthlib
-requests-toolbelt
-rfc3986
-rich
-rpds-py
-rsa
-s3fs
-s3transfer
-scikit-build-core
-semantic-version
-setuptools
-setuptools-rust
-setuptools-scm
-shellingham
-six
-sniffio
-sqlalchemy
-sqlparse
-starlette
-tabulate
-termcolor
-test-attestation-pkg
-test-pulp-upload
-tomli
-tomlkit
-tqdm
-trove-classifiers
-typer
-types-psutil
-types-setuptools
-typing-extensions
-typing-inspection
-tzdata
-tzlocal
-urllib3
-uvicorn
-versioneer
-vine
-virtualenv
-wcwidth
-webencodings
-websocket-client
-werkzeug
-wheel
-wrapt
-wsproto
-yarl
+python verify_package_provenance.py -h
+usage: verify_package_provenance.py [-h] [-q] packages [packages ...]
 
-Total: 191 packages
+Verify Python package provenance against Red Hat Trusted Libraries attestations
+
+positional arguments:
+  packages     Package name(s) to verify
+
+options:
+  -h, --help   show this help message and exit
+  -q, --quiet  Only show final result
+
+Examples:
+  verify_package_provenance.py requests              # Verify the 'requests' package
+  verify_package_provenance.py test-attestation-pkg  # Verify a package with attestations
+  verify_package_provenance.py numpy pandas          # Verify multiple packages
+
+This tool verifies:
+  1. Your installed wheel matches what Red Hat Trusted Libraries has published
+  2. If attestations exist, they match the wheel
+  3. Installed files haven't been modified since installation
 
 ```
+
+Note: Requires pip to be configured with Red Hat Trusted Libraries index URL. It also retrieves the credentials by using `pip config list` - if you are using another means to authenticate with the index (that isn't shown via the aforementioned command), please check and modify the `get_index_config()` method as needed.
+
+## Example
+
+``` 
+[🎩︎mnagel pulp-index] (main) $ python verify_package_provenance.py numpy
+
+============================================================
+Verifying package: numpy
+============================================================
+
+Installed: numpy 2.4.2
+Location: /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages
+[1/4] Locating wheel for numpy==2.4.2
+  Not found in cache, downloading...
+  Downloading numpy==2.4.2...
+  Downloaded to: /tmp/pip_verify_h8h6q3y8/numpy-2.4.2-0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+
+[2/4] Computing wheel SHA256
+  Wheel: numpy-2.4.2-0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+  SHA256: 6d0171a75d29c8f61f4cece337f7f0ca5e0cfd28371c1e41f385a0a5b4755d68
+
+[3/4] Fetching Red Hat Trusted Libraries metadata and attestations
+  Index SHA256: 6d0171a75d29c8f61f4cece337f7f0ca5e0cfd28371c1e41f385a0a5b4755d68
+  ✓ Wheel hash matches published hash
+
+  Provenance URL found: https://private.console.redhat.com/pypi/trusted-libraries/main/integrity/numpy/2.4.2/numpy-2.4.2-0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl/provenance/
+  Attestation subject SHA256: 6d0171a75d29c8f61f4cece337f7f0ca5e0cfd28371c1e41f385a0a5b4755d68
+  ✓ Attestation matches wheel hash
+
+[4/4] Verifying installed files against RECORD
+  Files verified: 918/918
+  ✓ All installed files match RECORD
+
+============================================================
+✓ VERIFICATION PASSED for numpy 2.4.2
+============================================================
+
+```
+
+NOTE: The script fetches the attestation based on the package name and Integrity API URL, _*NOT*_ from the `provenance_url` in the package metadata (which is erroneous at the moment, but will be fixed -> we're in **Tech Preview**)
