@@ -61,7 +61,7 @@ Location: /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages
 [1/4] Locating wheel for numpy==2.4.2
   Not found in cache, downloading...
   Downloading numpy==2.4.2...
-  Downloaded to: /tmp/pip_verify_h8h6q3y8/numpy-2.4.2-0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+  Downloaded to: /tmp/pip_verify_k56lxzzx/numpy-2.4.2-0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
 
 [2/4] Computing wheel SHA256
   Wheel: numpy-2.4.2-0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
@@ -71,17 +71,19 @@ Location: /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages
   Index SHA256: 6d0171a75d29c8f61f4cece337f7f0ca5e0cfd28371c1e41f385a0a5b4755d68
   ✓ Wheel hash matches published hash
 
-  Provenance URL found: https://private.console.redhat.com/pypi/trusted-libraries/main/integrity/numpy/2.4.2/numpy-2.4.2-0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl/provenance/
+  Provenance URL found: https://packages.redhat.com/pypi/trusted-libraries/main/integrity/numpy/2.4.2/numpy-2.4.2-0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl/provenance/
   Attestation subject SHA256: 6d0171a75d29c8f61f4cece337f7f0ca5e0cfd28371c1e41f385a0a5b4755d68
   ✓ Attestation matches wheel hash
 
-[4/4] Verifying installed files against RECORD
-  Files verified: 918/918
-  ✓ All installed files match RECORD
+[4/4] Verifying installed files against wheel's RECORD
+  (Using RECORD from verified wheel, not from disk)
+  Files verified: 914/914
+  ✓ All installed files match wheel's RECORD
 
 ============================================================
 ✓ VERIFICATION PASSED for numpy 2.4.2
 ============================================================
+
 
 ```
 

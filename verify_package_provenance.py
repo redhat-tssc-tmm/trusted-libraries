@@ -441,62 +441,128 @@ def extract_attestation_digest(attestation: dict) -> Optional[str]:
 
 
 # =============================================================================
-# STEP 5: Verify installed files against RECORD
+# STEP 5: Verify installed files against RECORD from wheel
 # =============================================================================
 
-def verify_installed_files(package_name: str) -> tuple[int, int, list[str]]:
+import csv
+import zipfile
+
+
+def parse_wheel_record(wheel_path: Path, package_name: str) -> dict[str, str]:
     """
-    Verify that installed files match the hashes in the package's RECORD.
-    
-    Every installed wheel contains a RECORD file in its .dist-info directory
-    that lists all installed files with their SHA256 hashes (base64-urlsafe
-    encoded). This verifies the installation wasn't tampered with after
-    installation.
-    
+    Extract and parse the RECORD file from a wheel.
+
+    The RECORD file is a CSV with columns: path, hash, size
+    Hash format is "sha256=<base64-urlsafe-encoded-digest>"
+
+    Args:
+        wheel_path: Path to the wheel file
+        package_name: Name of the package (to find dist-info directory)
+
+    Returns:
+        Dict mapping relative file paths to their expected SHA256 hex digests
+    """
+    records = {}
+
+    with zipfile.ZipFile(wheel_path, "r") as whl:
+        # Find the RECORD file (in <package>-<version>.dist-info/RECORD)
+        record_files = [n for n in whl.namelist() if n.endswith("/RECORD")]
+        if not record_files:
+            return records
+
+        record_path = record_files[0]
+        dist_info_prefix = record_path.rsplit("/", 1)[0] + "/"
+
+        with whl.open(record_path) as f:
+            # RECORD is a CSV file
+            reader = csv.reader(line.decode("utf-8") for line in f)
+            for row in reader:
+                if len(row) < 2:
+                    continue
+                file_path, hash_spec = row[0], row[1]
+
+                # Skip entries without hashes (RECORD itself, signatures)
+                if not hash_spec or not hash_spec.startswith("sha256="):
+                    continue
+
+                # Extract the base64-encoded hash and convert to hex
+                b64_hash = hash_spec.split("=", 1)[1]
+                # Add padding if needed
+                padding = 4 - (len(b64_hash) % 4)
+                if padding != 4:
+                    b64_hash += "=" * padding
+                try:
+                    hash_bytes = base64.urlsafe_b64decode(b64_hash)
+                    hex_hash = hash_bytes.hex()
+                    records[file_path] = hex_hash
+                except Exception:
+                    continue
+
+    return records
+
+
+def verify_installed_files_against_wheel(
+    package_name: str, wheel_path: Path
+) -> tuple[int, int, list[str]]:
+    """
+    Verify that installed files match the hashes in the wheel's RECORD.
+
+    This extracts the RECORD from the original wheel (verified against the
+    index) and compares it to the actual installed files. This proves the
+    installed files came from the verified wheel, not just that they match
+    the on-disk RECORD (which could have been tampered with).
+
     Args:
         package_name: Name of the installed package
-        
+        wheel_path: Path to the verified wheel file
+
     Returns:
         Tuple of (verified_count, total_count, list_of_mismatches)
     """
+    # Get the wheel's RECORD
+    wheel_records = parse_wheel_record(wheel_path, package_name)
+
+    if not wheel_records:
+        return 0, 0, ["Could not extract RECORD from wheel"]
+
+    # Get install location from the distribution
     dist = distribution(package_name)
-    
+    if not dist.files:
+        return 0, 0, ["No files recorded for this package"]
+
+    # Find the site-packages directory
+    sample_file = dist.files[0].locate()
+    install_location = sample_file.parent
+    while install_location.name != "site-packages" and install_location.parent != install_location:
+        install_location = install_location.parent
+
     verified = 0
-    total = 0
+    total = len(wheel_records)
     mismatches = []
-    
-    for file_entry in dist.files or []:
-        # RECORD itself and signature files have no hash
-        if file_entry.hash is None:
+
+    for rel_path, expected_hex_hash in wheel_records.items():
+        # Construct the full path to the installed file
+        full_path = install_location / rel_path
+
+        if not full_path.exists():
+            mismatches.append(f"MISSING: {rel_path}")
             continue
-        
-        total += 1
-        
+
         try:
-            full_path = file_entry.locate()
-            
-            if not full_path.exists():
-                mismatches.append(f"MISSING: {file_entry}")
-                continue
-            
             # Compute actual hash of installed file
             with open(full_path, "rb") as f:
-                actual_hash = hashlib.sha256(f.read()).digest()
-            
-            # RECORD stores hashes as "sha256=<base64-urlsafe>"
-            # file_entry.hash.value contains just the base64 part
-            expected_hash = base64.urlsafe_b64decode(
-                file_entry.hash.value + "=="  # Padding may be stripped
-            )
-            
-            if actual_hash == expected_hash:
+                actual_hash = hashlib.sha256(f.read()).hexdigest()
+
+            if actual_hash == expected_hex_hash:
                 verified += 1
             else:
-                mismatches.append(f"HASH MISMATCH: {file_entry}")
-                
+                mismatches.append(f"HASH MISMATCH: {rel_path}")
+                mismatches.append(f"  Expected: {expected_hex_hash}")
+                mismatches.append(f"  Actual:   {actual_hash}")
+
         except Exception as e:
-            mismatches.append(f"ERROR checking {file_entry}: {e}")
-    
+            mismatches.append(f"ERROR checking {rel_path}: {e}")
+
     return verified, total, mismatches
 
 
@@ -591,12 +657,15 @@ def verify_package(package_name: str) -> bool:
             print("  Warning: Could not fetch index metadata")
             all_passed = False
         
-        # Step 5: Verify installed files
-        print(f"\n[4/4] Verifying installed files against RECORD")
-        verified, total, mismatches = verify_installed_files(package_name)
-        
+        # Step 5: Verify installed files against the wheel's RECORD
+        print(f"\n[4/4] Verifying installed files against wheel's RECORD")
+        print(f"  (Using RECORD from verified wheel, not from disk)")
+        verified, total, mismatches = verify_installed_files_against_wheel(
+            package_name, wheel_path
+        )
+
         print(f"  Files verified: {verified}/{total}")
-        
+
         if mismatches:
             print("  ✗ Some files failed verification:")
             for m in mismatches[:10]:  # Limit output
@@ -605,7 +674,7 @@ def verify_package(package_name: str) -> bool:
                 print(f"    ... and {len(mismatches) - 10} more")
             all_passed = False
         else:
-            print("  ✓ All installed files match RECORD")
+            print("  ✓ All installed files match wheel's RECORD")
         
         # Summary
         print(f"\n{'='*60}")
