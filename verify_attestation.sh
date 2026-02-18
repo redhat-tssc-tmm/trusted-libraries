@@ -49,7 +49,7 @@ echo "Public Key: ${PUBLIC_KEY_FILE}"
 echo ""
 
 # Step 1: Get index URL from pip config
-echo "[1/6] Getting index URL from pip config..."
+echo "[1/7] Getting index URL from pip config..."
 INDEX_URL=$(pip config get global.index-url)
 INDEX_URL="${INDEX_URL%/}/"  # Ensure trailing slash
 
@@ -65,7 +65,7 @@ echo "       Index URL configured: OK"
 
 # Step 2: Fetch the attestation
 echo ""
-echo "[2/6] Fetching attestation from integrity API..."
+echo "[2/7] Fetching attestation from integrity API..."
 ATTESTATION_URL="${BASE_WITH_CREDS}/api/pypi/trusted-libraries/main/integrity/${PACKAGE}/${VERSION}/${FILENAME}/provenance/"
 
 ATTESTATION_FILE=$(mktemp /tmp/attestation.XXXXXX.json)
@@ -82,7 +82,7 @@ echo "       Attestation fetched: OK"
 
 # Step 3: Extract statement and signature
 echo ""
-echo "[3/6] Extracting statement and signature..."
+echo "[3/7] Extracting statement and signature..."
 
 STATEMENT_B64_FILE=$(mktemp /tmp/statement.XXXXXX.b64)
 STATEMENT_JSON_FILE=$(mktemp /tmp/statement.XXXXXX.json)
@@ -99,7 +99,7 @@ echo "       Signature extracted: OK"
 
 # Step 4: Display attestation details
 echo ""
-echo "[4/6] Attestation details:"
+echo "[4/7] Attestation details:"
 echo ""
 echo "       Subject: $(jq -r '.subject[0].name' "$STATEMENT_JSON_FILE")"
 echo "       SHA256:  $(jq -r '.subject[0].digest.sha256' "$STATEMENT_JSON_FILE")"
@@ -122,7 +122,7 @@ jq . "$STATEMENT_JSON_FILE"
 
 # Step 5: Clean the public key (remove any extra lines before PEM header)
 echo ""
-echo "[5/6] Preparing public key..."
+echo "[5/7] Preparing public key..."
 
 CLEAN_KEY_FILE=$(mktemp /tmp/clean-key.XXXXXX.pub)
 sed -n '/-----BEGIN PUBLIC KEY-----/,/-----END PUBLIC KEY-----/p' "$PUBLIC_KEY_FILE" > "$CLEAN_KEY_FILE"
@@ -136,55 +136,59 @@ fi
 KEY_INFO=$(openssl pkey -pubin -in "$CLEAN_KEY_FILE" -text -noout 2>/dev/null | head -1)
 echo "       Key type: $KEY_INFO"
 
-# Step 6: Verify signature with cosign
+# Step 6: Create DSSE PAE (Pre-Authentication Encoding)
 echo ""
-echo "[6/6] Verifying signature with cosign..."
+echo "[6/7] Creating DSSE Pre-Authentication Encoding (PAE)..."
 echo ""
-echo "       Attempting verification with base64-encoded statement..."
-echo "       Command: cosign verify-blob --key $PUBLIC_KEY_FILE --signature <sig.b64> --insecure-ignore-tlog=true <statement.b64>"
+echo "       The attestation uses DSSE (Dead Simple Signing Envelope) format."
+echo "       The signature is computed over the PAE, not the raw statement."
+echo ""
+
+# Decode the base64 statement to get the raw payload
+PAYLOAD_FILE=$(mktemp /tmp/payload.XXXXXX.bin)
+base64 -d "$STATEMENT_B64_FILE" > "$PAYLOAD_FILE"
+
+# Get payload length in bytes
+PAYLOAD_LEN=$(wc -c < "$PAYLOAD_FILE")
+
+# DSSE payload type for in-toto statements
+PAYLOAD_TYPE="application/vnd.in-toto+json"
+PAYLOAD_TYPE_LEN=${#PAYLOAD_TYPE}
+
+# Construct PAE: "DSSEv1" + SP + len(type) + SP + type + SP + len(payload) + SP + payload
+PAE_FILE=$(mktemp /tmp/pae.XXXXXX.bin)
+{
+    printf "DSSEv1 %d %s %d " "$PAYLOAD_TYPE_LEN" "$PAYLOAD_TYPE" "$PAYLOAD_LEN"
+    cat "$PAYLOAD_FILE"
+} > "$PAE_FILE"
+
+PAE_SIZE=$(wc -c < "$PAE_FILE")
+echo "       PAE size: ${PAE_SIZE} bytes"
+echo "       PAE format: DSSEv1 <type_len> <type> <payload_len> <payload>"
+echo "       Payload type: ${PAYLOAD_TYPE} (${PAYLOAD_TYPE_LEN} bytes)"
+echo "       Payload length: ${PAYLOAD_LEN} bytes"
+
+# Step 7: Verify signature with cosign
+echo ""
+echo "[7/7] Verifying signature with cosign..."
+echo ""
+echo "       Verifying DSSE signature against PAE..."
+echo "       Command: cosign verify-blob --key $PUBLIC_KEY_FILE --signature <sig.bin> --insecure-ignore-tlog=true <pae.bin>"
 echo ""
 
 # Try verification
 set +e  # Don't exit on error for this section
 
-# Decode signature to binary for some attempts
+# Decode signature to binary
 SIGNATURE_BIN_FILE=$(mktemp /tmp/signature.XXXXXX.bin)
 base64 -d "$SIGNATURE_B64_FILE" > "$SIGNATURE_BIN_FILE"
 
-echo "--- Verification attempt 1: base64 statement + base64 signature ---"
-cosign verify-blob \
-    --key "$CLEAN_KEY_FILE" \
-    --signature "$SIGNATURE_B64_FILE" \
-    --insecure-ignore-tlog=true \
-    "$STATEMENT_B64_FILE" 2>&1
-RESULT1=$?
-
-echo ""
-echo "--- Verification attempt 2: decoded statement + base64 signature ---"
-cosign verify-blob \
-    --key "$CLEAN_KEY_FILE" \
-    --signature "$SIGNATURE_B64_FILE" \
-    --insecure-ignore-tlog=true \
-    "$STATEMENT_JSON_FILE" 2>&1
-RESULT2=$?
-
-echo ""
-echo "--- Verification attempt 3: base64 statement + binary signature ---"
 cosign verify-blob \
     --key "$CLEAN_KEY_FILE" \
     --signature "$SIGNATURE_BIN_FILE" \
     --insecure-ignore-tlog=true \
-    "$STATEMENT_B64_FILE" 2>&1
-RESULT3=$?
-
-echo ""
-echo "--- Verification attempt 4: decoded statement + binary signature ---"
-cosign verify-blob \
-    --key "$CLEAN_KEY_FILE" \
-    --signature "$SIGNATURE_BIN_FILE" \
-    --insecure-ignore-tlog=true \
-    "$STATEMENT_JSON_FILE" 2>&1
-RESULT4=$?
+    "$PAE_FILE" 2>&1
+RESULT=$?
 
 set -e
 
@@ -195,8 +199,13 @@ echo "Verification Results"
 echo "============================================================"
 echo ""
 
-if [ $RESULT1 -eq 0 ] || [ $RESULT2 -eq 0 ] || [ $RESULT3 -eq 0 ] || [ $RESULT4 -eq 0 ]; then
+if [ $RESULT -eq 0 ]; then
     echo "✓ SIGNATURE VERIFIED SUCCESSFULLY"
+    echo ""
+    echo "The attestation signature is valid and was created with the"
+    echo "private key corresponding to: $PUBLIC_KEY_FILE"
+    echo ""
+    echo "This confirms the attestation was signed by the expected authority."
 else
     echo "✗ SIGNATURE VERIFICATION FAILED"
     echo ""
@@ -204,17 +213,18 @@ else
     echo "This means either:"
     echo "  1. The attestation was signed with a different private key"
     echo "  2. The public key file does not match the signing key"
+    echo "  3. The attestation data has been tampered with"
     echo ""
     echo "Public key used: $PUBLIC_KEY_FILE"
     echo "Key info: $KEY_INFO"
 fi
 
 # Cleanup
-rm -f "$ATTESTATION_FILE" "$STATEMENT_B64_FILE" "$STATEMENT_JSON_FILE" "$SIGNATURE_B64_FILE" "$SIGNATURE_BIN_FILE" "$CLEAN_KEY_FILE"
+rm -f "$ATTESTATION_FILE" "$STATEMENT_B64_FILE" "$STATEMENT_JSON_FILE" "$SIGNATURE_B64_FILE" "$SIGNATURE_BIN_FILE" "$CLEAN_KEY_FILE" "$PAE_FILE" "$PAYLOAD_FILE"
 
 echo ""
 
-if [ $RESULT1 -eq 0 ] || [ $RESULT2 -eq 0 ] || [ $RESULT3 -eq 0 ] || [ $RESULT4 -eq 0 ]; then
+if [ $RESULT -eq 0 ]; then
     exit 0
 else
     exit 1
