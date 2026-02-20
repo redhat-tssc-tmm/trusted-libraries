@@ -8,15 +8,17 @@ attestation by:
 2. Computing its SHA256 hash
 3. Fetching the attestation from Red Hat Trusted Libraries (Pulp)
 4. Comparing the attestation's subject digest to the wheel's hash
-5. Verifying installed files match the wheel's RECORD
+5. Verifying the attestation signature using cosign (DSSE PAE format)
+6. Verifying installed files match the wheel's RECORD
 
 Requirements:
     pip install requests
+    cosign CLI tool (for signature verification)
 
 Usage:
     python verify_package_provenance.py <package_name>
     python verify_package_provenance.py requests
-    python verify_package_provenance.py test-attestation-pkg
+    python verify_package_provenance.py --public-key /path/to/key.pub requests
 """
 
 import argparse
@@ -46,12 +48,17 @@ except ImportError:
 # Red Hat Trusted Libraries Index Configuration
 # =============================================================================
 
-def get_index_config() -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+def get_index_config() -> tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
     Extract index URL and credentials from pip config.
 
     Returns:
-        Tuple of (base_url, index_path, username, password)
+        Tuple of (base_url, simple_path, repo_name, username, password)
+        - base_url: scheme://hostname (e.g., https://packages.redhat.com)
+        - simple_path: full path for simple API (e.g., /trusted-libraries/python)
+        - repo_name: repository name for integrity API (e.g., trusted-libraries)
+        - username: authentication username
+        - password: authentication password
     """
     result = subprocess.run(
         ["pip", "config", "list"],
@@ -60,12 +67,12 @@ def get_index_config() -> tuple[Optional[str], Optional[str], Optional[str], Opt
     )
 
     if result.returncode != 0:
-        return None, None, None
+        return None, None, None, None, None
 
     # Parse the index-url from pip config output
     match = re.search(r"global\.index-url='([^']+)'", result.stdout)
     if not match:
-        return None, None, None
+        return None, None, None, None, None
 
     full_url = match.group(1)
 
@@ -73,17 +80,20 @@ def get_index_config() -> tuple[Optional[str], Optional[str], Optional[str], Opt
     parsed = urlparse(full_url)
 
     if parsed.username and parsed.password:
-        # Reconstruct base URL without credentials but with /api/ prefix for integrity API
         base_url = f"{parsed.scheme}://{parsed.hostname}"
-        index_path = parsed.path.rstrip("/").split("/")[-1]  # e.g., "trusted-libraries"
-        return base_url, index_path, unquote(parsed.username), unquote(parsed.password)
+        # Full path for simple API (e.g., /trusted-libraries/python)
+        simple_path = parsed.path.rstrip("/")
+        # Extract repo name from path (first segment, e.g., trusted-libraries)
+        path_parts = [p for p in parsed.path.split("/") if p]
+        repo_name = path_parts[0] if path_parts else None
+        return base_url, simple_path, repo_name, unquote(parsed.username), unquote(parsed.password)
 
-    return full_url, None, None, None
+    return full_url, None, None, None, None
 
 
 def get_requests_auth() -> Optional[tuple[str, str]]:
     """Get authentication tuple for requests library."""
-    base_url, index_path, username, password = get_index_config()
+    base_url, simple_path, repo_name, username, password = get_index_config()
     if username and password:
         return (username, password)
     return None
@@ -229,7 +239,7 @@ def get_wheel_for_package(package_name: str, version: str) -> tuple[Path, bool]:
         Tuple of (wheel_path, is_temporary) - is_temporary indicates if
         the caller should clean up the file/directory
     """
-    print(f"[1/4] Locating wheel for {package_name}=={version}")
+    print(f"[1/5] Locating wheel for {package_name}=={version}")
     
     # First, try to find it in pip's cache
     cached_wheel = find_wheel_in_cache(package_name, version)
@@ -291,15 +301,15 @@ def fetch_attestation(package_name: str, version: str, filename: str) -> Optiona
     Returns:
         Attestation dict if available, None otherwise
     """
-    base_url, index_path, username, password = get_index_config()
+    base_url, simple_path, repo_name, username, password = get_index_config()
 
-    if not base_url or not index_path:
+    if not base_url or not repo_name:
         print("  Warning: Could not get index configuration from pip config")
         return None
 
     # Red Hat Trusted Libraries integrity API endpoint
-    # Format: /api/pypi/{index}/main/integrity/{package}/{version}/{filename}/provenance/
-    attestation_url = f"{base_url}/api/pypi/{index_path}/main/integrity/{package_name}/{version}/{filename}/provenance/"
+    # Format: /api/pypi/{repo_name}/main/integrity/{package}/{version}/{filename}/provenance/
+    attestation_url = f"{base_url}/api/pypi/{repo_name}/main/integrity/{package_name}/{version}/{filename}/provenance/"
 
     try:
         auth = (username, password) if username and password else None
@@ -332,14 +342,15 @@ def get_index_digests(package_name: str, version: str, filename: str) -> Optiona
     Returns:
         Dict with 'filename', 'sha256', 'provenance_url', and 'url'
     """
-    base_url, index_path, username, password = get_index_config()
+    base_url, simple_path, repo_name, username, password = get_index_config()
 
-    if not base_url or not index_path:
+    if not base_url or not simple_path:
         print("  Warning: Could not get index configuration from pip config")
         return None
 
     # Use the simple index API with JSON accept header
-    url = f"{base_url}/{index_path}/{package_name}/"
+    # simple_path already contains the full path (e.g., /trusted-libraries/python)
+    url = f"{base_url}{simple_path}/{package_name}/"
 
     try:
         auth = (username, password) if username and password else None
@@ -441,7 +452,162 @@ def extract_attestation_digest(attestation: dict) -> Optional[str]:
 
 
 # =============================================================================
-# STEP 5: Verify installed files against RECORD from wheel
+# STEP 5: Verify attestation signature using cosign
+# =============================================================================
+
+def extract_attestation_envelope(attestation: dict) -> tuple[Optional[str], Optional[str]]:
+    """
+    Extract the base64-encoded statement and signature from an attestation.
+
+    Args:
+        attestation: The attestation dict from the integrity API
+
+    Returns:
+        Tuple of (statement_b64, signature_b64) or (None, None) if not found
+    """
+    if "attestation_bundles" not in attestation:
+        return None, None
+
+    bundles = attestation["attestation_bundles"]
+    if not bundles or len(bundles) == 0:
+        return None, None
+
+    bundle = bundles[0]
+    if "attestations" not in bundle or len(bundle["attestations"]) == 0:
+        return None, None
+
+    att = bundle["attestations"][0]
+    if "envelope" not in att:
+        return None, None
+
+    envelope = att["envelope"]
+    statement_b64 = envelope.get("statement")
+    signature_b64 = envelope.get("signature")
+
+    return statement_b64, signature_b64
+
+
+def create_dsse_pae(payload: bytes, payload_type: str = "application/vnd.in-toto+json") -> bytes:
+    """
+    Create DSSE Pre-Authentication Encoding (PAE) for signature verification.
+
+    DSSE PAE format:
+        DSSEv1 <type_len> <type> <payload_len> <payload>
+
+    Where spaces are literal space characters (0x20) and lengths are decimal strings.
+
+    Args:
+        payload: The payload bytes (decoded statement JSON)
+        payload_type: The payload type string
+
+    Returns:
+        The PAE bytes ready for signature verification
+    """
+    type_len = len(payload_type)
+    payload_len = len(payload)
+
+    # Construct: "DSSEv1 <type_len> <type> <payload_len> " + payload
+    pae_header = f"DSSEv1 {type_len} {payload_type} {payload_len} ".encode("utf-8")
+    return pae_header + payload
+
+
+def verify_attestation_signature(
+    attestation: dict,
+    public_key_path: Path
+) -> tuple[bool, str]:
+    """
+    Verify the attestation signature using cosign.
+
+    This constructs the DSSE PAE (Pre-Authentication Encoding) and verifies
+    the RSA signature over it using the cosign CLI.
+
+    Args:
+        attestation: The attestation dict from the integrity API
+        public_key_path: Path to the public key file (PEM format)
+
+    Returns:
+        Tuple of (success, message)
+    """
+    # Check if cosign is available
+    try:
+        result = subprocess.run(
+            ["cosign", "version"],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            return False, "cosign not available"
+    except FileNotFoundError:
+        return False, "cosign not installed"
+
+    # Check public key exists
+    if not public_key_path.exists():
+        return False, f"Public key not found: {public_key_path}"
+
+    # Extract statement and signature from attestation
+    statement_b64, signature_b64 = extract_attestation_envelope(attestation)
+    if not statement_b64 or not signature_b64:
+        return False, "Could not extract statement/signature from attestation"
+
+    # Decode statement and signature
+    try:
+        statement_bytes = base64.b64decode(statement_b64)
+        signature_bytes = base64.b64decode(signature_b64)
+    except Exception as e:
+        return False, f"Failed to decode base64: {e}"
+
+    # Create DSSE PAE
+    pae_bytes = create_dsse_pae(statement_bytes)
+
+    # Write temporary files for cosign
+    with tempfile.TemporaryDirectory(prefix="cosign_verify_") as temp_dir:
+        temp_path = Path(temp_dir)
+
+        # Write PAE
+        pae_file = temp_path / "pae.bin"
+        pae_file.write_bytes(pae_bytes)
+
+        # Write signature
+        sig_file = temp_path / "signature.bin"
+        sig_file.write_bytes(signature_bytes)
+
+        # Clean the public key (extract only PEM portion)
+        clean_key_file = temp_path / "clean_key.pub"
+        key_content = public_key_path.read_text()
+        # Extract PEM block
+        pem_match = re.search(
+            r"(-----BEGIN PUBLIC KEY-----.*?-----END PUBLIC KEY-----)",
+            key_content,
+            re.DOTALL
+        )
+        if pem_match:
+            clean_key_file.write_text(pem_match.group(1))
+        else:
+            # Try using the key as-is
+            clean_key_file.write_text(key_content)
+
+        # Run cosign verify-blob
+        result = subprocess.run(
+            [
+                "cosign", "verify-blob",
+                "--key", str(clean_key_file),
+                "--signature", str(sig_file),
+                "--insecure-ignore-tlog=true",
+                str(pae_file)
+            ],
+            capture_output=True,
+            text=True
+        )
+
+        if result.returncode == 0:
+            return True, "Signature verified successfully"
+        else:
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            return False, f"Signature verification failed: {error_msg}"
+
+
+# =============================================================================
+# STEP 6: Verify installed files against RECORD from wheel
 # =============================================================================
 
 import csv
@@ -502,7 +668,7 @@ def parse_wheel_record(wheel_path: Path, package_name: str) -> dict[str, str]:
 
 
 def verify_installed_files_against_wheel(
-    package_name: str, wheel_path: Path
+    package_name: str, wheel_path: Path, verbose: bool = False
 ) -> tuple[int, int, list[str]]:
     """
     Verify that installed files match the hashes in the wheel's RECORD.
@@ -515,6 +681,7 @@ def verify_installed_files_against_wheel(
     Args:
         package_name: Name of the installed package
         wheel_path: Path to the verified wheel file
+        verbose: If True, print each file as it's verified
 
     Returns:
         Tuple of (verified_count, total_count, list_of_mismatches)
@@ -546,6 +713,8 @@ def verify_installed_files_against_wheel(
 
         if not full_path.exists():
             mismatches.append(f"MISSING: {rel_path}")
+            if verbose:
+                print(f"    ✗ {full_path} (missing)")
             continue
 
         try:
@@ -555,10 +724,14 @@ def verify_installed_files_against_wheel(
 
             if actual_hash == expected_hex_hash:
                 verified += 1
+                if verbose:
+                    print(f"    ✓ {full_path}")
             else:
                 mismatches.append(f"HASH MISMATCH: {rel_path}")
                 mismatches.append(f"  Expected: {expected_hex_hash}")
                 mismatches.append(f"  Actual:   {actual_hash}")
+                if verbose:
+                    print(f"    ✗ {full_path} (hash mismatch)")
 
         except Exception as e:
             mismatches.append(f"ERROR checking {rel_path}: {e}")
@@ -570,19 +743,26 @@ def verify_installed_files_against_wheel(
 # Main verification flow
 # =============================================================================
 
-def verify_package(package_name: str) -> bool:
+def verify_package(
+    package_name: str,
+    public_key_path: Optional[Path] = None,
+    verbose: bool = False
+) -> bool:
     """
     Run the complete provenance verification for a package.
-    
+
     This verifies:
     1. The installed package exists
     2. The wheel hash matches Red Hat Trusted Libraries's published hash
     3. If attestations exist, they match the wheel hash
-    4. Installed files match the RECORD hashes
-    
+    4. If attestations exist and public key provided, verify signature with cosign
+    5. Installed files match the RECORD hashes
+
     Args:
         package_name: Name of the package to verify
-        
+        public_key_path: Optional path to public key for signature verification
+        verbose: If True, print each file as it's verified
+
     Returns:
         True if all verifications pass, False otherwise
     """
@@ -609,13 +789,13 @@ def verify_package(package_name: str) -> bool:
             temp_dir = wheel_path.parent
         
         # Step 3: Compute wheel hash
-        print(f"\n[2/4] Computing wheel SHA256")
+        print(f"\n[2/5] Computing wheel SHA256")
         wheel_hash = compute_sha256(wheel_path)
         print(f"  Wheel: {wheel_path.name}")
         print(f"  SHA256: {wheel_hash}")
         
         # Step 4: Fetch index data and attestation
-        print(f"\n[3/4] Fetching Red Hat Trusted Libraries metadata and attestations")
+        print(f"\n[3/5] Fetching Red Hat Trusted Libraries metadata and attestations")
         index_data = get_index_digests(name, version, wheel_path.name)
 
         if index_data:
@@ -649,6 +829,19 @@ def verify_package(package_name: str) -> bool:
                             all_passed = False
                     else:
                         print("  Warning: Could not extract digest from attestation")
+
+                    # Step 4: Verify attestation signature
+                    if public_key_path:
+                        print(f"\n[4/5] Verifying attestation signature with cosign")
+                        print(f"  Public key: {public_key_path}")
+                        sig_ok, sig_msg = verify_attestation_signature(attestation, public_key_path)
+                        if sig_ok:
+                            print(f"  ✓ {sig_msg}")
+                        else:
+                            print(f"  ✗ {sig_msg}")
+                            all_passed = False
+                    else:
+                        print(f"\n[4/5] Skipping signature verification (no public key provided)")
                 else:
                     print("  Warning: Could not fetch attestation")
             else:
@@ -656,12 +849,12 @@ def verify_package(package_name: str) -> bool:
         else:
             print("  Warning: Could not fetch index metadata")
             all_passed = False
-        
+
         # Step 5: Verify installed files against the wheel's RECORD
-        print(f"\n[4/4] Verifying installed files against wheel's RECORD")
+        print(f"\n[5/5] Verifying installed files against wheel's RECORD")
         print(f"  (Using RECORD from verified wheel, not from disk)")
         verified, total, mismatches = verify_installed_files_against_wheel(
-            package_name, wheel_path
+            package_name, wheel_path, verbose=verbose
         )
 
         print(f"  Files verified: {verified}/{total}")
@@ -693,22 +886,31 @@ def verify_package(package_name: str) -> bool:
             shutil.rmtree(temp_dir)
 
 
+def get_default_public_key_path() -> Path:
+    """Get the default public key path (redhat-release3.pub in script directory)."""
+    script_dir = Path(__file__).parent.resolve()
+    return script_dir / "redhat-release3.pub"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Verify Python package provenance against Red Hat Trusted Libraries attestations",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s requests              # Verify the 'requests' package
-  %(prog)s test-attestation-pkg  # Verify a package with attestations
-  %(prog)s numpy pandas          # Verify multiple packages
+  %(prog)s requests                              # Verify with default key
+  %(prog)s --public-key /path/to/key.pub requests  # Use custom key
+  %(prog)s --no-signature requests               # Skip signature verification
+  %(prog)s numpy pandas                          # Verify multiple packages
 
 This tool verifies:
   1. Your installed wheel matches what Red Hat Trusted Libraries has published
   2. If attestations exist, they match the wheel
-  3. Installed files haven't been modified since installation
+  3. If public key is provided, attestation signature is verified with cosign
+  4. Installed files haven't been modified since installation
 
 Note: Requires pip to be configured with Red Hat Trusted Libraries index URL.
+      For signature verification, cosign CLI must be installed.
         """
     )
     parser.add_argument(
@@ -717,16 +919,48 @@ Note: Requires pip to be configured with Red Hat Trusted Libraries index URL.
         help="Package name(s) to verify"
     )
     parser.add_argument(
+        "--public-key", "-k",
+        type=Path,
+        default=None,
+        help="Path to public key for signature verification (default: redhat-release3.pub in script directory)"
+    )
+    parser.add_argument(
+        "--no-signature",
+        action="store_true",
+        help="Skip attestation signature verification"
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Print each file path as it's verified against the RECORD"
+    )
+    parser.add_argument(
         "-q", "--quiet",
         action="store_true",
         help="Only show final result"
     )
-    
+
     args = parser.parse_args()
-    
+
+    # Determine public key path
+    if args.no_signature:
+        public_key_path = None
+    elif args.public_key:
+        public_key_path = args.public_key.resolve()
+    else:
+        # Use default key if it exists
+        default_key = get_default_public_key_path()
+        if default_key.exists():
+            public_key_path = default_key
+        else:
+            print(f"Note: Default public key not found at {default_key}")
+            print("      Signature verification will be skipped.")
+            print("      Use --public-key to specify a key, or --no-signature to suppress this message.\n")
+            public_key_path = None
+
     results = {}
     for package in args.packages:
-        results[package] = verify_package(package)
+        results[package] = verify_package(package, public_key_path, verbose=args.verbose)
         print()  # Blank line between packages
     
     # Exit with appropriate code
