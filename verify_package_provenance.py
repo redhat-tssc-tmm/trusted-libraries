@@ -48,6 +48,22 @@ except ImportError:
 # Red Hat Trusted Libraries Index Configuration
 # =============================================================================
 
+def normalize_package_name(name: str) -> str:
+    """
+    Normalize a package name per PEP 503.
+
+    Package names are case-insensitive and treat hyphens, underscores,
+    and periods as equivalent. The canonical form is lowercase with hyphens.
+
+    Args:
+        name: Package name to normalize
+
+    Returns:
+        Normalized package name (lowercase, hyphens)
+    """
+    return re.sub(r'[-_.]+', '-', name).lower()
+
+
 def get_index_config() -> tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
     Extract index URL and credentials from pip config.
@@ -309,7 +325,9 @@ def fetch_attestation(package_name: str, version: str, filename: str) -> Optiona
 
     # Red Hat Trusted Libraries integrity API endpoint
     # Format: /api/pypi/{repo_name}/main/integrity/{package}/{version}/{filename}/provenance/
-    attestation_url = f"{base_url}/api/pypi/{repo_name}/main/integrity/{package_name}/{version}/{filename}/provenance/"
+    # Package name must be normalized (lowercase) per PEP 503
+    normalized_name = normalize_package_name(package_name)
+    attestation_url = f"{base_url}/api/pypi/{repo_name}/main/integrity/{normalized_name}/{version}/{filename}/provenance/"
 
     try:
         auth = (username, password) if username and password else None
@@ -828,7 +846,8 @@ def verify_package(
                             print(f"    Wheel:       {wheel_hash}")
                             all_passed = False
                     else:
-                        print("  Warning: Could not extract digest from attestation")
+                        print("  ✗ Could not extract digest from attestation")
+                        all_passed = False
 
                     # Step 4: Verify attestation signature
                     if public_key_path:
@@ -843,9 +862,11 @@ def verify_package(
                     else:
                         print(f"\n[4/5] Skipping signature verification (no public key provided)")
                 else:
-                    print("  Warning: Could not fetch attestation")
+                    print("  ✗ Could not fetch attestation")
+                    all_passed = False
             else:
-                print("  No attestation available for this package")
+                print("  ✗ No attestation available for this package")
+                all_passed = False
         else:
             print("  Warning: Could not fetch index metadata")
             all_passed = False

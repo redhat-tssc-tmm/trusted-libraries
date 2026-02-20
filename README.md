@@ -62,85 +62,85 @@ Note: Requires pip to be configured with Red Hat Trusted Libraries index URL. It
 ### Example
 
 ``` 
-[🎩︎mnagel pulp-index] (main) $ python verify_package_provenance.py --verbose pyyaml
+[🎩︎mnagel pulp-index] (main) $ python verify_package_provenance.py --verbose pymysql
 
 ============================================================
-Verifying package: pyyaml
+Verifying package: pymysql
 ============================================================
 
-✗ Package 'pyyaml' is not installed
+✗ Package 'pymysql' is not installed
 
-[🎩︎mnagel pulp-index] (main) $ pip install pyyaml
-Looking in indexes: https://6340056%7Ctrusted-libraries:****@packages.redhat.com/trusted-libraries/python
-Collecting pyyaml
-  Downloading https://packages.redhat.com/api/pulp-content/trusted-libraries/main/pyyaml-6.0.3-0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
-Downloading https://packages.redhat.com/api/pulp-content/trusted-libraries/main/pyyaml-6.0.3-0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (693 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 693.7/693.7 kB 4.0 MB/s  0:00:00
-Installing collected packages: pyyaml
-Successfully installed pyyaml-6.0.3
-[🎩︎mnagel pulp-index] (main) $ python verify_package_provenance.py --verbose pyyaml
+[🎩︎mnagel pulp-index] (main) $ pip install pymysql
+Looking in indexes: https://20235381%7Ctrusted-libraries:****@packages.redhat.com/trusted-libraries/python
+Collecting pymysql
+  Downloading https://packages.redhat.com/api/pulp-content/trusted-libraries/main/pymysql-1.1.2-0-py3-none-any.whl.metadata (4.3 kB)
+Downloading https://packages.redhat.com/api/pulp-content/trusted-libraries/main/pymysql-1.1.2-0-py3-none-any.whl (46 kB)
+Installing collected packages: pymysql
+Successfully installed pymysql-1.1.2
+
+[🎩︎mnagel pulp-index] (main) $ python verify_package_provenance.py --verbose pymysql
 
 ============================================================
-Verifying package: pyyaml
+Verifying package: pymysql
 ============================================================
 
-Installed: PyYAML 6.0.3
+Installed: PyMySQL 1.1.2
 Location: /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages
-[1/5] Locating wheel for PyYAML==6.0.3
+[1/5] Locating wheel for PyMySQL==1.1.2
   Not found in cache, downloading...
-  Downloading PyYAML==6.0.3...
-  Downloaded to: /tmp/pip_verify_3jlcnbat/pyyaml-6.0.3-0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+  Downloading PyMySQL==1.1.2...
+  Downloaded to: /tmp/pip_verify_wkcfdp1e/pymysql-1.1.2-0-py3-none-any.whl
 
 [2/5] Computing wheel SHA256
-  Wheel: pyyaml-6.0.3-0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
-  SHA256: df088c59bcc2fc6a1ed21fb2db644f9890782f4fe658518756886833286a60b6
+  Wheel: pymysql-1.1.2-0-py3-none-any.whl
+  SHA256: 473cf5e4b20a244469d5308993aca001f6323409e6b2d04b484b8ab2e80f28be
 
 [3/5] Fetching Red Hat Trusted Libraries metadata and attestations
-  Index SHA256: df088c59bcc2fc6a1ed21fb2db644f9890782f4fe658518756886833286a60b6
+  Index SHA256: 473cf5e4b20a244469d5308993aca001f6323409e6b2d04b484b8ab2e80f28be
   ✓ Wheel hash matches published hash
 
-  Provenance URL found: https://packages.redhat.com/pypi/trusted-libraries/main/integrity/pyyaml/6.0.3/pyyaml-6.0.3-0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl/provenance/
-  No attestation found at: https://packages.redhat.com/api/pypi/trusted-libraries/main/integrity/PyYAML/6.0.3/pyyaml-6.0.3-0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl/provenance/
-  Warning: Could not fetch attestation
+  Provenance URL found: https://packages.redhat.com/pypi/trusted-libraries/main/integrity/pymysql/1.1.2/pymysql-1.1.2-0-py3-none-any.whl/provenance/
+  Attestation subject SHA256: 473cf5e4b20a244469d5308993aca001f6323409e6b2d04b484b8ab2e80f28be
+  ✓ Attestation matches wheel hash
+
+[4/5] Verifying attestation signature with cosign
+  Public key: /home/mnagel/Documents/appServices/calunga/pulp-index/redhat-release3.pub
+  ✓ Signature verified successfully
 
 [5/5] Verifying installed files against wheel's RECORD
   (Using RECORD from verified wheel, not from disk)
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/_yaml/__init__.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml.libs/libyaml-0-40b3dddf.so.2.0.5
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/__init__.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/_yaml.cpython-312-x86_64-linux-gnu.so
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/composer.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/constructor.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/cyaml.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/dumper.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/emitter.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/error.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/events.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/loader.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/nodes.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/parser.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/reader.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/representer.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/resolver.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/scanner.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/serializer.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/yaml/tokens.py
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/METADATA
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/WHEEL
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/fromager-build-backend-requirements.txt
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/fromager-build-sdist-requirements.txt
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/fromager-build-settings
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/fromager-build-system-requirements.txt
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/fromager-elf-requires.txt
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/top_level.txt
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/licenses/LICENSE
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/sboms/auditwheel.cdx.json
-    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pyyaml-6.0.3.dist-info/pyyaml-6.0.3-0.spdx.json
-  Files verified: 31/31
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/__init__.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/_auth.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/charset.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/connections.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/converters.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/cursors.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/err.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/optionfile.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/protocol.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/times.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/constants/CLIENT.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/constants/COMMAND.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/constants/CR.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/constants/ER.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/constants/FIELD_TYPE.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/constants/FLAG.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/constants/SERVER_STATUS.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql/constants/__init__.py
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql-1.1.2.dist-info/licenses/LICENSE
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql-1.1.2.dist-info/METADATA
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql-1.1.2.dist-info/WHEEL
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql-1.1.2.dist-info/fromager-build-backend-requirements.txt
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql-1.1.2.dist-info/fromager-build-sdist-requirements.txt
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql-1.1.2.dist-info/fromager-build-settings
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql-1.1.2.dist-info/fromager-build-system-requirements.txt
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql-1.1.2.dist-info/top_level.txt
+    ✓ /home/mnagel/.pyenv/versions/3.12.12/lib/python3.12/site-packages/pymysql-1.1.2.dist-info/pymysql-1.1.2-0.spdx.json
+  Files verified: 27/27
   ✓ All installed files match wheel's RECORD
 
 ============================================================
-✓ VERIFICATION PASSED for PyYAML 6.0.3
+✓ VERIFICATION PASSED for PyMySQL 1.1.2
 ============================================================
 
 ```

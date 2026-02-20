@@ -1,7 +1,7 @@
 # Claude
 .claude/
 
-# public key (should be fetches from source at https://access.redhat.com/security/team/key )
+# public key (should be fetched from source at https://access.redhat.com/security/team/key )
 redhat-release3.pub
 
 # Python
