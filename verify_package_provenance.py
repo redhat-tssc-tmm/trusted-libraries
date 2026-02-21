@@ -835,6 +835,22 @@ def verify_package(
                 print(f"\n  Provenance URL found: {provenance_url}")
                 attestation = fetch_attestation(name, version, index_data.get("filename"))
                 if attestation:
+                    # Display raw and decoded attestation in verbose mode
+                    if verbose:
+                        print("\n  --- Raw Attestation ---")
+                        print(json.dumps(attestation, indent=2))
+
+                        # Decode and display the statement
+                        statement_b64, _ = extract_attestation_envelope(attestation)
+                        if statement_b64:
+                            try:
+                                statement_json = json.loads(base64.b64decode(statement_b64))
+                                print("\n  --- Decoded Statement ---")
+                                print(json.dumps(statement_json, indent=2))
+                            except (json.JSONDecodeError, Exception) as e:
+                                print(f"\n  Warning: Could not decode statement: {e}")
+                        print()
+
                     att_digest = extract_attestation_digest(attestation)
                     if att_digest:
                         print(f"  Attestation subject SHA256: {att_digest}")
