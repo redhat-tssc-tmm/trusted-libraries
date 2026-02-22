@@ -7,9 +7,15 @@ Each script focuses on one aspect of the verification process, with detailed com
 ## Prerequisites
 
 - Python 3.12 (will be expanded to other python versions, we start with 3.12)
+    - best use a python virtual environment (venv)
+    - if you're using a different python version but want to test drive this with 3.12, use version management, such as [pyenv](https://github.com/pyenv/pyenv)
 - `pip install requests`
-- `cosign` CLI tool (for signature verification)
+- `cosign` CLI tool (for signature verification: [installation guide](https://docs.sigstore.dev/cosign/system_config/installation/))
 - pip configured with Red Hat Trusted Libraries index URL
+- Red Hat's public key file (default: `../../redhat-release3.pub`)
+  - The `release key 3` key file can be downloaded from [Red Hat's public key site](https://access.redhat.com/security/team/key)
+
+
 
 ## Scripts Overview
 
@@ -31,7 +37,7 @@ Each script focuses on one aspect of the verification process, with detailed com
 ## Quick Start
 
 ```bash
-# Complete verification (recommended)
+# Complete verification 
 python verify_package_provenance.py pyyaml
 
 # Complete verification with verbose output
@@ -41,7 +47,7 @@ python verify_package_provenance.py --verbose pyyaml
 python verify_package_provenance.py pyyaml urllib3 certifi
 ```
 
-### Individual Steps (for learning/debugging)
+### Individual Steps (for learning/testing/debugging)
 
 ```bash
 # Fetch and display an attestation
@@ -61,24 +67,13 @@ python verify_installed_files.py pyyaml
 
 These scripts demonstrate a complete chain of trust:
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        VERIFICATION CHAIN                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  1. ATTESTATION SIGNATURE (verify_signature.py)                     │
-│     └─> Proves the attestation was signed by Red Hat               │
-│                                                                     │
-│  2. WHEEL HASH (verify_wheel_hash.py)                              │
-│     └─> Proves the wheel matches what was attested                 │
-│                                                                     │
-│  3. INSTALLED FILES (verify_installed_files.py)                    │
-│     └─> Proves installed files match the verified wheel            │
-│                                                                     │
-│  Combined: Proves your installed code came from Red Hat's build    │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+| Step | Script | What It Proves |
+|------|--------|----------------|
+| 1 | `verify_signature.py` | The attestation was signed by Red Hat |
+| 2 | `verify_wheel_hash.py` | The wheel matches what was attested |
+| 3 | `verify_installed_files.py` | Installed files match the verified wheel |
+
+**Combined result:** Proves your installed code came from Red Hat's build.
 
 ## Key Concepts
 
