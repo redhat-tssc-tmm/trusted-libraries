@@ -15,6 +15,7 @@ python verify_signature.py --public-key /path/to/key.pub numpy
 - `pip install requests`
 - `cosign` CLI tool ([installation guide](https://docs.sigstore.dev/cosign/system_config/installation/))
 - Red Hat's public key file (default: `../../redhat-release3.pub`)
+  - The `release key 3` key file can be downloaded from [Red Hat's public key site](https://access.redhat.com/security/team/key)
 
 ## What It Does
 
