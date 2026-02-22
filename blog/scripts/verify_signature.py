@@ -50,7 +50,7 @@ Usage:
 
 Requirements:
     pip install requests
-    cosign CLI tool (https://docs.sigstore.dev/cosign/installation/)
+    cosign CLI tool (https://docs.sigstore.dev/cosign/system_config/installation/)
 """
 
 import argparse
