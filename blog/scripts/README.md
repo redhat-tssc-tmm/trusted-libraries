@@ -6,12 +6,20 @@ Each script focuses on one aspect of the verification process, with detailed com
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.12 (will be expanded to other python versions, we start with 3.12)
 - `pip install requests`
 - `cosign` CLI tool (for signature verification)
 - pip configured with Red Hat Trusted Libraries index URL
 
 ## Scripts Overview
+
+### Complete Verification
+
+| Script | Purpose |
+|--------|---------|
+| [verify_package_provenance.py](docs/verify_package_provenance.md) | **Complete end-to-end verification** (combines all steps) |
+
+### Individual Steps (Educational)
 
 | Script | Purpose |
 |--------|---------|
@@ -21,6 +29,19 @@ Each script focuses on one aspect of the verification process, with detailed com
 | [verify_installed_files.py](docs/verify_installed_files.md) | Verify installed files against wheel's RECORD |
 
 ## Quick Start
+
+```bash
+# Complete verification (recommended)
+python verify_package_provenance.py pyyaml
+
+# Complete verification with verbose output
+python verify_package_provenance.py --verbose pyyaml
+
+# Verify multiple packages
+python verify_package_provenance.py pyyaml urllib3 certifi
+```
+
+### Individual Steps (for learning/debugging)
 
 ```bash
 # Fetch and display an attestation
