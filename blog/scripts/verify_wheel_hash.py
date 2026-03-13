@@ -245,19 +245,25 @@ def compute_sha256(file_path: Path) -> str:
 # =============================================================================
 
 
-def fetch_attestation(package_name: str, version: str, filename: str) -> Optional[dict]:
-    """Fetch the attestation for a specific package file."""
-    base_url, simple_path, repo_name, username, password = get_index_config()
+def ensure_api_prefix(provenance_url: str) -> str:
+    """
+    Ensure the provenance URL uses the /api/ endpoint prefix.
 
-    if not base_url or not repo_name:
-        print("Error: Could not get index configuration")
-        return None
+    The Simple API provenance field may or may not include the /api/ prefix
+    needed to reach the JSON endpoint. This adds it if missing.
+    See CALUNGA-189.
+    """
+    parsed = urlparse(provenance_url)
+    if parsed.path.startswith("/api/"):
+        return provenance_url
+    return f"{parsed.scheme}://{parsed.hostname}/api{parsed.path}"
 
-    normalized_name = normalize_package_name(package_name)
-    attestation_url = (
-        f"{base_url}/api/pypi/{repo_name}/main/integrity/"
-        f"{normalized_name}/{version}/{filename}/provenance/"
-    )
+
+def fetch_attestation(provenance_url: str) -> Optional[dict]:
+    """Fetch the attestation using the provenance URL from the Simple API."""
+    _, _, _, username, password = get_index_config()
+
+    attestation_url = ensure_api_prefix(provenance_url)
 
     try:
         auth = (username, password) if username and password else None
@@ -266,7 +272,7 @@ def fetch_attestation(package_name: str, version: str, filename: str) -> Optiona
         if response.status_code == 200:
             return response.json()
         elif response.status_code == 404:
-            print(f"No attestation found for this package")
+            print(f"No attestation found at: {attestation_url}")
             return None
         else:
             print(f"Error: Attestation request returned {response.status_code}")
@@ -475,12 +481,8 @@ def verify_wheel_hash(package_name: str, keep_wheel: bool = False) -> bool:
         print()
 
         # Step 4: Fetch attestation
-        print("Step 4: Fetching attestation from integrity API...")
-        attestation = fetch_attestation(
-            package_name,
-            package_info['version'],
-            package_info['filename']
-        )
+        print("Step 4: Fetching attestation...")
+        attestation = fetch_attestation(package_info['provenance_url'])
         if not attestation:
             return False
         print("  Attestation retrieved successfully")

@@ -145,32 +145,40 @@ def extract_version_from_wheel(filename: str) -> str:
 # Attestation Fetching
 # =============================================================================
 
-def fetch_attestation(package_name: str, version: str, filename: str) -> Optional[dict]:
+def ensure_api_prefix(provenance_url: str) -> str:
     """
-    Fetch attestation from the integrity API.
+    Ensure the provenance URL uses the /api/ endpoint prefix.
+
+    The Simple API provenance field may or may not include the /api/ prefix
+    needed to reach the JSON endpoint. This adds it if missing.
+    See CALUNGA-189.
+    """
+    parsed = urlparse(provenance_url)
+    if parsed.path.startswith("/api/"):
+        return provenance_url
+    return f"{parsed.scheme}://{parsed.hostname}/api{parsed.path}"
+
+
+def fetch_attestation(provenance_url: str) -> Optional[dict]:
+    """
+    Fetch attestation using the provenance URL from the Simple API.
 
     Args:
-        package_name: Name of the package
-        version: Version string
-        filename: Wheel filename
+        provenance_url: The provenance URL from the Simple API metadata
 
     Returns:
         Attestation dict or None
     """
-    base_url, simple_path, repo_name, username, password = get_index_config()
+    _, _, _, username, password = get_index_config()
 
-    if not base_url or not repo_name:
-        print("Error: Could not get index configuration")
-        return None
-
-    attestation_url = f"{base_url}/api/pypi/{repo_name}/main/integrity/{package_name}/{version}/{filename}/provenance/"
+    attestation_url = ensure_api_prefix(provenance_url)
 
     try:
         auth = (username, password) if username and password else None
         resp = requests.get(attestation_url, auth=auth, timeout=30)
 
         if resp.status_code == 404:
-            print(f"Error: No attestation found for {filename}")
+            print(f"Error: No attestation found at: {attestation_url}")
             return None
 
         resp.raise_for_status()
@@ -421,8 +429,8 @@ def verify_attestation(package_name: str, public_key_path: Path, show_full: bool
 
     # Step 4: Fetch attestation
     print()
-    print("[4/8] Fetching attestation from integrity API...")
-    attestation = fetch_attestation(package_name, version, filename)
+    print("[4/8] Fetching attestation...")
+    attestation = fetch_attestation(wheel_info["provenance"])
     if not attestation:
         return False
     print("       Attestation fetched: OK")

@@ -219,34 +219,36 @@ def get_package_info(package_name: str) -> Optional[dict]:
 #         - signature: base64-encoded cryptographic signature
 
 
-def fetch_attestation(package_name: str, version: str, filename: str) -> Optional[dict]:
+def ensure_api_prefix(provenance_url: str) -> str:
     """
-    Fetch the attestation for a specific package file.
+    Ensure the provenance URL uses the /api/ endpoint prefix.
+
+    The Simple API provenance field may or may not include the /api/ prefix
+    needed to reach the JSON endpoint. This adds it if missing.
+    See CALUNGA-189.
+    """
+    parsed = urlparse(provenance_url)
+    if parsed.path.startswith("/api/"):
+        return provenance_url
+    return f"{parsed.scheme}://{parsed.hostname}/api{parsed.path}"
+
+
+def fetch_attestation(provenance_url: str) -> Optional[dict]:
+    """
+    Fetch the attestation using the provenance URL from the Simple API.
 
     The integrity API provides cryptographic attestations that prove
     the provenance (origin and build process) of each package file.
 
     Args:
-        package_name: Name of the package
-        version: Version string
-        filename: The specific wheel filename
+        provenance_url: The provenance URL from the Simple API metadata
 
     Returns:
         The attestation dict if available, None otherwise
     """
-    base_url, simple_path, repo_name, username, password = get_index_config()
+    _, _, _, username, password = get_index_config()
 
-    if not base_url or not repo_name:
-        print("Error: Could not get index configuration")
-        return None
-
-    # Construct the integrity API URL
-    # Format: /api/pypi/{repo_name}/main/integrity/{package}/{version}/{filename}/provenance/
-    normalized_name = normalize_package_name(package_name)
-    attestation_url = (
-        f"{base_url}/api/pypi/{repo_name}/main/integrity/"
-        f"{normalized_name}/{version}/{filename}/provenance/"
-    )
+    attestation_url = ensure_api_prefix(provenance_url)
 
     print(f"Fetching attestation from:\n  {attestation_url}\n")
 
@@ -444,12 +446,8 @@ Note: Requires pip to be configured with Red Hat Trusted Libraries index URL.
     print()
 
     # Step 2: Fetch the attestation
-    print("Step 2: Fetching attestation from integrity API...")
-    attestation = fetch_attestation(
-        args.package,
-        package_info['version'],
-        package_info['filename']
-    )
+    print("Step 2: Fetching attestation...")
+    attestation = fetch_attestation(package_info['provenance_url'])
 
     if not attestation:
         print("Failed to fetch attestation")

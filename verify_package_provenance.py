@@ -302,32 +302,36 @@ def compute_sha256(file_path: Path) -> str:
 # STEP 4: Fetch attestation from Red Hat Trusted Libraries
 # =============================================================================
 
-def fetch_attestation(package_name: str, version: str, filename: str) -> Optional[dict]:
+def ensure_api_prefix(provenance_url: str) -> str:
     """
-    Fetch attestation from Red Hat Trusted Libraries (Pulp) for a specific release file.
+    Ensure the provenance URL uses the /api/ endpoint prefix.
+
+    The Simple API provenance field may or may not include the /api/ prefix
+    needed to reach the JSON endpoint. This adds it if missing.
+    See CALUNGA-189.
+    """
+    parsed = urlparse(provenance_url)
+    if parsed.path.startswith("/api/"):
+        return provenance_url
+    return f"{parsed.scheme}://{parsed.hostname}/api{parsed.path}"
+
+
+def fetch_attestation(provenance_url: str) -> Optional[dict]:
+    """
+    Fetch attestation using the provenance URL from the Simple API.
 
     The attestation contains an in-toto SLSA provenance statement with the subject
     (file) and its digest.
 
     Args:
-        package_name: Name of the package
-        version: Version string
-        filename: The specific wheel/sdist filename
+        provenance_url: The provenance URL from the Simple API metadata
 
     Returns:
         Attestation dict if available, None otherwise
     """
-    base_url, simple_path, repo_name, username, password = get_index_config()
+    _, _, _, username, password = get_index_config()
 
-    if not base_url or not repo_name:
-        print("  Warning: Could not get index configuration from pip config")
-        return None
-
-    # Red Hat Trusted Libraries integrity API endpoint
-    # Format: /api/pypi/{repo_name}/main/integrity/{package}/{version}/{filename}/provenance/
-    # Package name must be normalized (lowercase) per PEP 503
-    normalized_name = normalize_package_name(package_name)
-    attestation_url = f"{base_url}/api/pypi/{repo_name}/main/integrity/{normalized_name}/{version}/{filename}/provenance/"
+    attestation_url = ensure_api_prefix(provenance_url)
 
     try:
         auth = (username, password) if username and password else None
@@ -833,7 +837,7 @@ def verify_package(
             provenance_url = index_data.get("provenance_url")
             if provenance_url:
                 print(f"\n  Provenance URL found: {provenance_url}")
-                attestation = fetch_attestation(name, version, index_data.get("filename"))
+                attestation = fetch_attestation(provenance_url)
                 if attestation:
                     # Display raw and decoded attestation in verbose mode
                     if verbose:
