@@ -59,7 +59,7 @@ def normalize_package_name(name: str) -> str:
     return re.sub(r'[-_.]+', '-', name).lower()
 
 
-def fetch_simple_api_metadata(package_name: str) -> Optional[dict]:
+def fetch_simple_api_metadata(package_name: str) -> tuple[Optional[str], Optional[dict]]:
     """
     Fetch all metadata for a package from the PEP 691 JSON Simple API.
 
@@ -67,13 +67,14 @@ def fetch_simple_api_metadata(package_name: str) -> Optional[dict]:
         package_name: Name of the package
 
     Returns:
-        The full JSON response dict, or None on error
+        Tuple of (url, data) where url is the API URL queried and data is
+        the full JSON response dict, or (None, None) on error
     """
     base_url, simple_path, repo_name, username, password = get_index_config()
 
     if not base_url or not simple_path:
         print("Error: Could not get index configuration from pip config")
-        return None
+        return None, None
 
     normalized_name = normalize_package_name(package_name)
     url = f"{base_url}{simple_path}/{normalized_name}/"
@@ -83,10 +84,10 @@ def fetch_simple_api_metadata(package_name: str) -> Optional[dict]:
         headers = {"Accept": "application/vnd.pypi.simple.v1+json"}
         resp = requests.get(url, auth=auth, headers=headers, timeout=30)
         resp.raise_for_status()
-        return resp.json()
+        return url, resp.json()
     except requests.RequestException as e:
         print(f"Error: Failed to fetch metadata for '{package_name}': {e}")
-        return None
+        return url, None
 
 
 def print_file_entry(file_info: dict, index: int) -> None:
@@ -106,10 +107,12 @@ def print_file_entry(file_info: dict, index: int) -> None:
 
 def show_metadata(package_name: str, raw: bool = False) -> None:
     """Fetch and display all Simple API metadata for a package."""
+    url, data = fetch_simple_api_metadata(package_name)
     print(f"Fetching metadata for: {package_name}")
+    print(f"URL: {url}")
+    print(f"Accept: application/vnd.pypi.simple.v1+json")
     print()
 
-    data = fetch_simple_api_metadata(package_name)
     if not data:
         sys.exit(1)
 
