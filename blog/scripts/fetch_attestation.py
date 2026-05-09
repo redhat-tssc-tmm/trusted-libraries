@@ -381,18 +381,32 @@ def display_attestation(attestation: dict, statement: Optional[dict]) -> None:
         # Extract predicate info
         predicate = statement.get("predicate", {})
         if predicate:
-            # Handle nested predicate structure
-            inner_predicate = predicate.get("predicate", predicate)
+            predicate_type = statement.get("predicateType", "N/A")
             print(f"Predicate (build information):")
-            print(f"  Type:      {statement.get('predicateType', 'N/A')}")
-            print(f"  BuildType: {inner_predicate.get('buildType', 'N/A')}")
+            print(f"  Type:      {predicate_type}")
 
-            builder = inner_predicate.get("builder", {})
-            print(f"  Builder:   {builder.get('id', 'N/A')}")
+            if "buildDefinition" in predicate:
+                # SLSA provenance v1 format
+                build_def = predicate["buildDefinition"]
+                print(f"  BuildType: {build_def.get('buildType', 'N/A')}")
 
-            metadata = inner_predicate.get("metadata", {})
-            if metadata:
-                print(f"  Built on:  {metadata.get('buildFinishedOn', 'N/A')}")
+                run_details = predicate.get("runDetails", {})
+                builder = run_details.get("builder", {})
+                print(f"  Builder:   {builder.get('id', 'N/A')}")
+
+                metadata = run_details.get("metadata", {})
+                if metadata:
+                    print(f"  Built on:  {metadata.get('finishedOn', 'N/A')}")
+            else:
+                # SLSA provenance v0.2 format
+                print(f"  BuildType: {predicate.get('buildType', 'N/A')}")
+
+                builder = predicate.get("builder", {})
+                print(f"  Builder:   {builder.get('id', 'N/A')}")
+
+                metadata = predicate.get("metadata", {})
+                if metadata:
+                    print(f"  Built on:  {metadata.get('buildFinishedOn', 'N/A')}")
 
 
 # =============================================================================
